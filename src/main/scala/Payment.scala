@@ -1,3 +1,4 @@
+import OrderManager.OrderManagerCommand
 import Payment._
 import akka.actor.{ActorRef, FSM}
 
@@ -6,7 +7,7 @@ object Payment {
   case object Open extends PaymentState
 
   sealed trait PaymentCommand
-  case object DoPayment
+  case object DoPayment extends PaymentCommand with OrderManagerCommand
 
   sealed trait PaymentEvent
   case object PaymentReceived extends PaymentEvent

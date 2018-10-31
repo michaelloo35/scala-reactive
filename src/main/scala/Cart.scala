@@ -1,5 +1,6 @@
 import Cart.{NonEmpty, _}
 import Checkout.{CheckoutCancelled, CheckoutClosed, CheckoutStarted, StartCheckout}
+import OrderManager.{Event, OrderManagerCommand}
 import akka.actor.{FSM, Props}
 
 import scala.collection.mutable.ListBuffer
@@ -12,13 +13,13 @@ object Cart {
   case object InCheckout extends CartState
 
   sealed trait CartCommand
-  case class AddItem(item: String) extends CartCommand
-  case class RemoveItem(item: String) extends CartCommand
+  case class AddItem(item: String) extends CartCommand with OrderManagerCommand
+  case class RemoveItem(item: String) extends CartCommand with OrderManagerCommand
 
   sealed trait CartEvent
-  case class ItemAdded(item: String) extends CartEvent
-  case class ItemRemoved(item: String) extends CartEvent
-  case object CartEmptied extends CartEvent
+  case class ItemAdded(item: String) extends CartEvent with Event
+  case class ItemRemoved(item: String) extends CartEvent with Event
+  case object CartEmptied extends CartEvent with Event
 
   sealed trait Timer
   case object CartTimerExpired extends Timer

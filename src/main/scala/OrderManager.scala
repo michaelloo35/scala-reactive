@@ -12,78 +12,80 @@ object OrderManager {
   case object InPayment extends OrderManagerState
   case object Finished extends OrderManagerState
 
-  sealed trait OrderManagerData
-  case class CartRef(cart: ActorRef) extends OrderManagerData
-  case class CheckoutRef(checkout: ActorRef) extends OrderManagerData
-  case class PaymentRef(payment: ActorRef) extends OrderManagerData
+  trait OrderManagerCommand
 
-  sealed trait Event
+  sealed trait OrderManagerData
+  case class CartRef(cart: ActorRef, owner: ActorRef) extends OrderManagerData
+  case class CheckoutRef(checkout: ActorRef, owner: ActorRef) extends OrderManagerData
+  case class PaymentRef(payment: ActorRef, owner: ActorRef) extends OrderManagerData
+
+  trait Event
   case object Done extends Event
 }
 
 class OrderManager extends FSM[OrderManagerState, OrderManagerData] {
 
-  startWith(Open, CartRef(context.actorOf(Props[Cart])))
+  startWith(Open, CartRef(context.actorOf(Props[Cart]), null))
 
   when(Open) {
-    case Event(AddItem(item), CartRef(cart)) =>
+    case Event(AddItem(item), CartRef(cart, _)) =>
       cart ! AddItem(item)
-      stay using CartRef(cart)
-    case Event(ItemAdded(item), CartRef(cart)) =>
+      stay using CartRef(cart, sender)
+    case Event(ItemAdded(item), CartRef(cart, owner)) =>
       log.info("Item added : {}", item)
-      sender ! Done
-      stay using CartRef(cart)
+      owner ! Done
+      stay using CartRef(cart, owner)
 
-    case Event(RemoveItem(item), CartRef(cart)) =>
+    case Event(RemoveItem(item), CartRef(cart, _)) =>
       cart ! RemoveItem(item)
-      stay using CartRef(cart)
-    case Event(ItemRemoved(item), CartRef(cart)) =>
+      stay using CartRef(cart, sender)
+    case Event(ItemRemoved(item), CartRef(cart, owner)) =>
       log.info("Item removed : {}", item)
-      sender ! Done
-      stay using CartRef(cart)
+      owner ! Done
+      stay using CartRef(cart, owner)
 
-    case Event(StartCheckout, CartRef(cart)) =>
+    case Event(StartCheckout, CartRef(cart, _)) =>
       log.info("Starting checkout")
       cart ! StartCheckout
-      stay using CartRef(cart)
-    case Event(CheckoutStarted(checkout), CartRef(_)) =>
+      stay using CartRef(cart, sender)
+    case Event(CheckoutStarted(checkout), CartRef(_, owner)) =>
       log.info("Started checkout")
-      context.parent ! Done
-      goto(InCheckout) using CheckoutRef(checkout)
+      owner ! Done
+      goto(InCheckout) using CheckoutRef(checkout, owner)
   }
 
 
   when(InCheckout) {
-    case Event(SelectDeliveryMethod(deliveryMethod), CheckoutRef(checkout)) =>
+    case Event(SelectDeliveryMethod(deliveryMethod), CheckoutRef(checkout, _)) =>
       checkout ! SelectDeliveryMethod(deliveryMethod)
-      stay using CheckoutRef(checkout)
-    case Event(SelectedDeliveryMethod(method), CheckoutRef(checkoutRef)) =>
+      stay using CheckoutRef(checkout, sender)
+    case Event(SelectedDeliveryMethod(method), CheckoutRef(checkoutRef, owner)) =>
       log.info("Delivery method registered {} " + method)
-      context.parent ! Done
-      stay using CheckoutRef(checkoutRef)
+      owner ! Done
+      stay using CheckoutRef(checkoutRef, owner)
 
-    case Event(SelectPaymentMethod(paymentMethod), CheckoutRef(checkout)) =>
+    case Event(SelectPaymentMethod(paymentMethod), CheckoutRef(checkout, _)) =>
       checkout ! SelectPaymentMethod(paymentMethod)
-      stay using CheckoutRef(checkout)
-    case Event(SelectedPaymentMethod(method), CheckoutRef(checkoutRef)) =>
+      stay using CheckoutRef(checkout, sender)
+    case Event(SelectedPaymentMethod(method), CheckoutRef(checkoutRef, owner)) =>
       log.info("Payment method registered {} " + method)
-      context.parent ! Done
-      stay using CheckoutRef(checkoutRef)
+      owner ! Done
+      stay using CheckoutRef(checkoutRef, owner)
 
-    case Event(PaymentServiceStarted(payment), CheckoutRef(_)) =>
+    case Event(PaymentServiceStarted(payment), CheckoutRef(_, owner)) =>
       log.info("Payment service started")
-      context.parent ! Done
-      goto(InPayment) using PaymentRef(payment)
+      owner ! Done
+      goto(InPayment) using PaymentRef(payment, owner)
   }
 
   when(InPayment) {
-    case Event(DoPayment, PaymentRef(payment)) =>
+    case Event(DoPayment, PaymentRef(payment, _)) =>
       payment ! DoPayment
-      stay using PaymentRef(payment)
+      stay using PaymentRef(payment, sender)
 
-    case Event(PaymentConfirmed, PaymentRef(_)) =>
+    case Event(PaymentConfirmed, PaymentRef(_, owner)) =>
       log.info("Finished payment")
-      context.parent ! Done
+      owner ! Done
       goto(Finished)
   }
 

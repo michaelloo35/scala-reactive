@@ -1,6 +1,8 @@
 import Checkout._
+import OrderManager.{Event, OrderManagerCommand}
 import Payment.{PaymentReceived, PaymentServiceStarted}
 import akka.actor.{ActorRef, FSM, Props}
+
 import scala.concurrent.duration._
 
 object Checkout {
@@ -12,18 +14,18 @@ object Checkout {
   case object ProcessingPayment extends CheckoutState
 
   sealed trait CheckoutCommand
-  case object StartCheckout extends CheckoutCommand
-  case object ClosePayment extends CheckoutCommand
-  case object CancelPayment extends CheckoutCommand
-  case class SelectDeliveryMethod(deliveryMethod: String) extends CheckoutCommand
-  case class SelectPaymentMethod(paymentMethod: String) extends CheckoutCommand
+  case object StartCheckout extends CheckoutCommand with OrderManagerCommand
+  case object ClosePayment extends CheckoutCommand with OrderManagerCommand
+  case object CancelPayment extends CheckoutCommand with OrderManagerCommand
+  case class SelectDeliveryMethod(deliveryMethod: String) extends CheckoutCommand with OrderManagerCommand
+  case class SelectPaymentMethod(paymentMethod: String) extends CheckoutCommand with OrderManagerCommand
 
   sealed trait CheckoutEvent
-  case class SelectedDeliveryMethod(deliveryMethod: String) extends CheckoutEvent
-  case class SelectedPaymentMethod(paymentMethod: String) extends CheckoutEvent
-  case class CheckoutStarted(checkoutRef: ActorRef) extends CheckoutEvent
-  case object CheckoutCancelled extends CheckoutEvent
-  case object CheckoutClosed extends CheckoutEvent
+  case class SelectedDeliveryMethod(deliveryMethod: String) extends CheckoutEvent with Event
+  case class SelectedPaymentMethod(paymentMethod: String) extends CheckoutEvent with Event
+  case class CheckoutStarted(checkoutRef: ActorRef) extends CheckoutEvent with Event
+  case object CheckoutCancelled extends CheckoutEvent with Event
+  case object CheckoutClosed extends CheckoutEvent with Event
 
   sealed trait Timer
   case object DeliveryExpired extends Timer
