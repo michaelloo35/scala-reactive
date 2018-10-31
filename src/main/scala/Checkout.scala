@@ -21,9 +21,9 @@ object Checkout {
   case class SelectPaymentMethod(paymentMethod: String) extends CheckoutCommand with OrderManagerCommand
 
   sealed trait CheckoutEvent
-  case class SelectedDeliveryMethod(deliveryMethod: String) extends CheckoutEvent with Event
-  case class SelectedPaymentMethod(paymentMethod: String) extends CheckoutEvent with Event
-  case class CheckoutStarted(checkoutRef: ActorRef) extends CheckoutEvent with Event
+  case class SelectedDeliveryMethod(deliveryMethod: String) extends CheckoutEvent
+  case class SelectedPaymentMethod(paymentMethod: String) extends CheckoutEvent
+  case class CheckoutStarted(checkoutRef: ActorRef) extends CheckoutEvent
   case object CheckoutCancelled extends CheckoutEvent with Event
   case object CheckoutClosed extends CheckoutEvent with Event
 
