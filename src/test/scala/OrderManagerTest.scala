@@ -32,7 +32,7 @@ class OrderManagerTest
         orderManager.stateName shouldBe expectedState
       }
 
-      val orderManager = TestFSMRef[OrderManagerState, OrderManagerData, OrderManager](new OrderManager())
+      val orderManager = TestFSMRef[OrderManagerState, OrderManagerData, OrderManager](new OrderManager(),"orderManager")
       orderManager.stateName shouldBe Open
 
       sendMessageAndValidateState(orderManager, AddItem("rollerblades"), Open)

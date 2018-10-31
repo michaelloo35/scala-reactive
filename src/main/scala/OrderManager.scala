@@ -25,7 +25,7 @@ object OrderManager {
 
 class OrderManager extends FSM[OrderManagerState, OrderManagerData] {
 
-  startWith(Open, CartRef(context.actorOf(Props[Cart]), null))
+  startWith(Open, CartRef(context.actorOf(Props[Cart],"cart"), null))
 
   when(Open) {
     case Event(AddItem(item), CartRef(cart, _)) =>

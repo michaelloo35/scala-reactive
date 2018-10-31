@@ -52,7 +52,7 @@ class Checkout extends FSM[CheckoutState, CheckoutData] {
       log.info("Selected payment method: {}", paymentMethod)
       sender ! SelectedPaymentMethod(paymentMethod)
 
-      val payment = context.actorOf(Props[Payment])
+      val payment = context.actorOf(Props[Payment],"payment")
       sender ! PaymentServiceStarted(payment)
       goto(ProcessingPayment) using CheckoutData(deliveryMethod, paymentMethod, sender)
   }
@@ -78,7 +78,7 @@ class Checkout extends FSM[CheckoutState, CheckoutData] {
 
   whenUnhandled {
     case Event(PaymentExpired, _) | Event(DeliveryExpired, _) =>
-      log.info("Checkout canceled")
+      log.info("Checkout cancelled")
       context.parent ! CheckoutCancelled
       stop
       stay
