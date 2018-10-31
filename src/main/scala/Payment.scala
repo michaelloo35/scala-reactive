@@ -12,8 +12,7 @@ object Payment {
   sealed trait PaymentEvent
   case object PaymentReceived extends PaymentEvent
   case object PaymentConfirmed extends PaymentEvent
-
-  case class PaymentServiceStarted(paymentRef: ActorRef)
+  case class PaymentServiceStarted(paymentRef: ActorRef) extends PaymentEvent
 
   sealed trait PaymentData
 }
