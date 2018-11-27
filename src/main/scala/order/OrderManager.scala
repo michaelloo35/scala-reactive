@@ -1,150 +1,109 @@
 package order
 
-import akka.actor.Props
-import akka.persistence.fsm.PersistentFSM
-import akka.persistence.fsm.PersistentFSM.FSMState
+import akka.actor.{ActorRef, FSM, Props}
 import cart.CartManager
-import cart.CartManager._
-import checkout.CheckoutManager.{DeliveryMethodSelected, _}
-import order.OrderManager.{Finished, InCheckout, InPayment, Open, OrderState, _}
-import payment.PaymentManager.{DoPayment, PaymentConfirmed, PaymentReceived, PaymentServiceStarted}
-
-import scala.reflect.{ClassTag, classTag}
+import cart.CartManager.{InCheckout => _, _}
+import checkout.CheckoutManager._
+import order.OrderManager._
+import payment.Payment.{DoPayment, PaymentConfirmed, PaymentServiceStarted}
 
 object OrderManager {
 
-  sealed trait OrderState extends FSMState
-  case object Open extends OrderState {
-    override def identifier: String = "Open"
-  }
-  case object InCheckout extends OrderState {
-    override def identifier: String = "InCheckout"
-  }
-  case object InPayment extends OrderState {
-    override def identifier: String = "InPayment"
-  }
-  case object Finished extends OrderState {
-    override def identifier: String = "Finished"
-  }
+  sealed trait OrderManagerState
+  case object Open extends OrderManagerState
+  case object InCheckout extends OrderManagerState
+  case object InPayment extends OrderManagerState
+  case object Finished extends OrderManagerState
 
-  trait OrderCommand
+  trait OrderManagerCommand
 
-  trait OrderEvent
-  case object Done extends OrderEvent
+  sealed trait OrderManagerData
+  case class CartRef(cart: ActorRef, owner: ActorRef) extends OrderManagerData
+  case class CheckoutRef(checkout: ActorRef, owner: ActorRef) extends OrderManagerData
+  case class PaymentRef(payment: ActorRef, owner: ActorRef) extends OrderManagerData
+
+  trait Event
+  case object Done extends Event
 }
 
-class OrderManager extends PersistentFSM[OrderState, Order, OrderEvent] {
-  override def persistenceId: String = "order-manager-fsm-id-1"
-  override def domainEventClassTag: ClassTag[OrderEvent] = classTag[OrderEvent]
-  startWith(Open, CartManagerRef(context.actorOf(Props[CartManager], "cart"), null))
+class OrderManager extends FSM[OrderManagerState, OrderManagerData] {
+
+  startWith(Open, CartRef(context.actorOf(Props[CartManager], "cart"), null))
 
   when(Open) {
-    case Event(AddItem(item), _) =>
-      log.info("AddItem: " + item)
-      stay applying AddItem(item)
+    case Event(AddItem(item), CartRef(cart, _)) =>
+      cart ! AddItem(item)
+      stay using CartRef(cart, sender)
+    case Event(ItemAdded(item), CartRef(cart, owner)) =>
+      log.info("Item added : {}", item)
+      owner ! Done
+      stay using CartRef(cart, owner)
 
-    case Event(ItemAdded(item), _) =>
-      log.info("ItemAdded: " + item)
-      stay applying ItemAdded(item)
+    case Event(RemoveItem(id, count), CartRef(cart, _)) =>
+      cart ! RemoveItem(id, count)
+      stay using CartRef(cart, sender)
+    case Event(ItemRemoved(id, count), CartRef(cart, owner)) =>
+      log.info("Item removed : {} {}", id, count)
+      owner ! Done
+      stay using CartRef(cart, owner)
 
-    case Event(RemoveItem(id, count), _) =>
-      stay applying RemoveItem(id, count)
-
-    case Event(ItemRemoved(id, count), _) =>
-      stay applying ItemRemoved(id, count)
-
-    case Event(StartCheckout, _) =>
-      log.info("StartCheckout")
-      stay applying StartCheckout
-
-    case Event(CheckoutStarted(checkout), _) =>
-      log.info("CheckoutStarted")
-      goto(InCheckout) applying CheckoutStarted(checkout)
+    case Event(StartCheckout, CartRef(cart, _)) =>
+      log.info("Starting checkout")
+      cart ! StartCheckout
+      stay using CartRef(cart, sender)
+    case Event(CheckoutStarted(checkout), CartRef(_, owner)) =>
+      log.info("Started checkout")
+      owner ! Done
+      goto(InCheckout) using CheckoutRef(checkout, owner)
   }
 
 
   when(InCheckout) {
-    case Event(SelectDeliveryMethod(deliveryMethod), _) =>
-      log.info("SelectDeliveryMethod: " + deliveryMethod)
-      stay applying SelectDeliveryMethod(deliveryMethod)
+    case Event(SelectDeliveryMethod(deliveryMethod), CheckoutRef(checkout, _)) =>
+      checkout ! SelectDeliveryMethod(deliveryMethod)
+      stay using CheckoutRef(checkout, sender)
+    case Event(DeliveryMethodSelected(method), CheckoutRef(checkoutRef, owner)) =>
+      log.info("Delivery method registered {} " + method)
+      owner ! Done
+      stay using CheckoutRef(checkoutRef, owner)
 
-    case Event(DeliveryMethodSelected(deliveryMethod), _) =>
-      log.info("DeliveryMethodSelected: " + deliveryMethod)
-      stay applying DeliveryMethodSelected(deliveryMethod)
+    case Event(SelectPaymentMethod(paymentMethod), CheckoutRef(checkout, _)) =>
+      checkout ! SelectPaymentMethod(paymentMethod)
+      stay using CheckoutRef(checkout, sender)
+    case Event(PaymentMethodSelected(method), CheckoutRef(checkoutRef, owner)) =>
+      log.info("Payment method registered {} " + method)
+      owner ! Done
+      stay using CheckoutRef(checkoutRef, owner)
 
-    case Event(SelectPaymentMethod(paymentMethod), _) =>
-      log.info("SelectPaymentMethod: " + paymentMethod)
-      stay applying SelectPaymentMethod(paymentMethod)
-
-    case Event(PaymentMethodSelected(paymentMethod), _) =>
-      log.info("PaymentMethodSelected " + paymentMethod)
-      stay applying PaymentMethodSelected(paymentMethod)
-
-    case Event(PaymentServiceStarted(payment), _) =>
-      log.info("PaymentServiceStarted")
-      goto(InPayment) applying PaymentServiceStarted(payment)
+    case Event(PaymentServiceStarted(payment), CheckoutRef(_, owner)) =>
+      log.info("Payment service started")
+      owner ! Done
+      goto(InPayment) using PaymentRef(payment, owner)
   }
 
   when(InPayment) {
-    case Event(DoPayment, _) =>
-      log.info("DoPayment")
-      stay applying DoPayment
+    case Event(DoPayment, PaymentRef(payment, _)) =>
+      payment ! DoPayment
+      stay using PaymentRef(payment, sender)
 
-    case Event(PaymentConfirmed, _) =>
-      log.info("PaymentConfirmed")
-      goto(Finished)
+    case Event(PaymentConfirmed, PaymentRef(_, owner)) =>
+      log.info("Finished payment")
+      owner ! Done
+      goto(Open)
   }
 
   when(Finished) {
     case Event(CartEmptied, _) =>
-      log.info("Order finished")
-      stop
+      log.info("Order finished Cart Emptied")
+      stay
   }
 
   whenUnhandled {
     case Event(e, s) =>
-      log.info("received unhandled request {} in state {}/{}", e, stateName, s)
+      log.warning("received unhandled request {} in state {}/{}", e, stateName, s)
       stay
   }
 
-  override def applyEvent(orderEvent: OrderEvent, orderBeforeEvent: Order): Order = {
-    orderEvent match {
-      case ItemAdded(_) | ItemRemoved(_, _) | DeliveryMethodSelected(_) | PaymentMethodSelected(_) | PaymentReceived ⇒
-        orderBeforeEvent.getOwnerRef ! Done
-        orderBeforeEvent
-
-      case AddItem(item) ⇒
-        orderBeforeEvent.getCartManagerRef ! AddItem(item)
-        CartManagerRef(orderBeforeEvent.getCartManagerRef, sender) // update sender
-
-      case RemoveItem(id, count) ⇒
-        orderBeforeEvent.getCartManagerRef ! RemoveItem(id, count)
-        CartManagerRef(orderBeforeEvent.getCartManagerRef, sender) // update sender
-
-      case StartCheckout ⇒
-        orderBeforeEvent.getCartManagerRef ! StartCheckout
-        CheckoutManagerRef(null, sender) // update sender
-
-      case CheckoutStarted(checkoutManager) ⇒
-        orderBeforeEvent.getOwnerRef ! Done
-        CheckoutManagerRef(checkoutManager, orderBeforeEvent.getOwnerRef)
-
-      case SelectDeliveryMethod(deliveryMethod) ⇒
-        orderBeforeEvent.getCheckoutManagerRef ! SelectDeliveryMethod(deliveryMethod)
-        CheckoutManagerRef(orderBeforeEvent.getCheckoutManagerRef, sender) // update sender
-
-      case SelectPaymentMethod(paymentMethod) ⇒
-        orderBeforeEvent.getCheckoutManagerRef ! SelectPaymentMethod(paymentMethod)
-        CheckoutManagerRef(orderBeforeEvent.getCheckoutManagerRef, sender) // update sender
-
-      case PaymentServiceStarted(payment) ⇒
-        orderBeforeEvent.getOwnerRef ! Done
-        PaymentManagerRef(payment, orderBeforeEvent.getOwnerRef)
-
-      case DoPayment ⇒
-        orderBeforeEvent.getPaymentManagerRef ! DoPayment
-        orderBeforeEvent
-    }
-  }
+  initialize()
 
 }

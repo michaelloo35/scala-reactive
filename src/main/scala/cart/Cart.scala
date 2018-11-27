@@ -20,7 +20,11 @@ case class NonEmptyCart(items: Map[URI, Item]) extends Cart {
     val currentCount = getCurrentCount(item)
     val updatedItem = item.copy(count = currentCount + item.count)
 
-    this.copy(items + ((updatedItem.id, updatedItem)))
+    println("ITEMS BEFORE ADDITION: " + items)
+    val cart = this.copy(items + ((updatedItem.id, updatedItem)))
+    println("ITEMS AFTER ADDITION: " + cart.items)
+
+    cart
   }
 
   def removeItem(id: URI, count: Int): NonEmptyCart = {

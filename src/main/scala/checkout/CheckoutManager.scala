@@ -3,10 +3,10 @@ package checkout
 import akka.actor.{ActorRef, Props}
 import akka.persistence.fsm.PersistentFSM
 import akka.persistence.fsm.PersistentFSM.FSMState
-import checkout.CheckoutManager.{CheckoutState, DeliveryExpired, PaymentExpired, ProcessingPayment, SelectDeliveryMethod, SelectPaymentMethod, DeliveryMethodSelected, PaymentMethodSelected, SelectingDeliveryMethod, SelectingPaymentMethod, _}
-import order.OrderManager.{OrderEvent, OrderCommand}
-import payment.PaymentManager
-import payment.PaymentManager.{PaymentReceived, PaymentServiceStarted}
+import checkout.CheckoutManager.{CheckoutState, DeliveryExpired, DeliveryMethodSelected, PaymentExpired, PaymentMethodSelected, ProcessingPayment, SelectDeliveryMethod, SelectPaymentMethod, SelectingDeliveryMethod, SelectingPaymentMethod, _}
+import order.OrderManager.OrderManagerCommand
+import payment.Payment
+import payment.Payment.{PaymentReceived, PaymentServiceStarted}
 
 import scala.concurrent.duration._
 import scala.reflect.{ClassTag, classTag}
@@ -30,18 +30,18 @@ object CheckoutManager {
   }
 
   sealed trait CheckoutCommand
-  case object StartCheckout extends CheckoutCommand with OrderCommand with OrderEvent
-  case object ClosePayment extends CheckoutCommand with OrderCommand
-  case object CancelPayment extends CheckoutCommand with OrderCommand
-  case class SelectDeliveryMethod(deliveryMethod: String) extends CheckoutCommand with OrderCommand with OrderEvent
-  case class SelectPaymentMethod(paymentMethod: String) extends CheckoutCommand with OrderCommand with OrderEvent
+  case object StartCheckout extends CheckoutCommand with OrderManagerCommand
+  case object ClosePayment extends CheckoutCommand with OrderManagerCommand
+  case object CancelPayment extends CheckoutCommand with OrderManagerCommand
+  case class SelectDeliveryMethod(deliveryMethod: String) extends CheckoutCommand with OrderManagerCommand
+  case class SelectPaymentMethod(paymentMethod: String) extends CheckoutCommand with OrderManagerCommand
 
-  sealed trait CheckoutEvent
-  case class DeliveryMethodSelected(deliveryMethod: String) extends CheckoutEvent with OrderEvent
-  case class PaymentMethodSelected(paymentMethod: String) extends CheckoutEvent with OrderEvent
-  case class CheckoutStarted(checkoutManager: ActorRef) extends CheckoutEvent with OrderEvent
-  case object CheckoutCancelled extends CheckoutEvent with OrderEvent
-  case object CheckoutClosed extends CheckoutEvent with OrderEvent
+  trait CheckoutEvent
+  case class DeliveryMethodSelected(deliveryMethod: String) extends CheckoutEvent
+  case class PaymentMethodSelected(paymentMethod: String) extends CheckoutEvent
+  case class CheckoutStarted(checkoutManager: ActorRef) extends CheckoutEvent
+  case object CheckoutCancelled extends CheckoutEvent
+  case object CheckoutClosed extends CheckoutEvent
 
   sealed trait Timer
   case object DeliveryTimer extends Timer
@@ -67,7 +67,7 @@ class CheckoutManager extends PersistentFSM[CheckoutState, Checkout, CheckoutEve
     case Event(SelectPaymentMethod(paymentMethod), _) =>
       log.info("Selected payment method: {}", paymentMethod)
 
-      val payment = context.actorOf(Props[PaymentManager], "payment")
+      val payment = context.actorOf(Props[Payment], "payment")
       goto(ProcessingPayment) applying PaymentMethodSelected(paymentMethod) replying PaymentServiceStarted(payment)
   }
 
@@ -78,15 +78,16 @@ class CheckoutManager extends PersistentFSM[CheckoutState, Checkout, CheckoutEve
       log.info("Checkout Finished")
       checkout.getOrderManager ! CheckoutClosed
       context.parent ! CheckoutClosed // reply to cart
-      stop
+      log.info("Checkout finished stopping")
+      stop applying PaymentReceived
   }
 
   onTransition {
     case _ -> SelectingDeliveryMethod =>
-      setTimer(DeliveryTimer.toString, DeliveryExpired, 3 seconds)
+      setTimer(DeliveryTimer.toString, DeliveryExpired, 60 seconds)
     case _ -> SelectingPaymentMethod =>
       cancelTimer(DeliveryTimer.toString)
-      setTimer(PaymentTimer.toString, PaymentExpired, 3 seconds)
+      setTimer(PaymentTimer.toString, PaymentExpired, 60 seconds)
   }
 
   whenUnhandled {
@@ -106,7 +107,9 @@ class CheckoutManager extends PersistentFSM[CheckoutState, Checkout, CheckoutEve
       case CheckoutCancelled ⇒ checkoutBeforeEvent
       case CheckoutClosed ⇒ checkoutBeforeEvent
       case CheckoutStarted(_) ⇒ checkoutBeforeEvent
-
+      case PaymentReceived =>
+        context.stop(self)
+        checkoutBeforeEvent
     }
   }
 }

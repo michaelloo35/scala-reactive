@@ -9,7 +9,6 @@ import cart.Cart.Item
 import cart.CartManager.{AddItem, CartState, CartTimerExpired, InCheckout, Initialized, ItemAdded, ItemRemoved, RemoveItem, _}
 import checkout.CheckoutManager
 import checkout.CheckoutManager.{CheckoutCancelled, CheckoutClosed, CheckoutStarted, StartCheckout}
-import order.OrderManager.OrderEvent
 
 import scala.concurrent.duration._
 import scala.reflect.{ClassTag, classTag}
@@ -25,13 +24,13 @@ object CartManager {
   }
 
   sealed trait CartCommand
-  case class AddItem(item: Item) extends CartCommand with OrderEvent
-  case class RemoveItem(id: URI, count: Int) extends CartCommand with OrderEvent
+  case class AddItem(item: Item) extends CartCommand
+  case class RemoveItem(id: URI, count: Int) extends CartCommand
 
   sealed trait CartEvent
-  case class ItemAdded(item: Item) extends CartEvent with OrderEvent
-  case class ItemRemoved(id: URI, count: Int) extends CartEvent with OrderEvent
-  case object CartEmptied extends CartEvent with OrderEvent
+  case class ItemAdded(item: Item) extends CartEvent
+  case class ItemRemoved(id: URI, count: Int) extends CartEvent
+  case object CartEmptied extends CartEvent
 
   sealed trait Timer
   case object CartTimerExpired extends Timer
@@ -60,16 +59,16 @@ class CartManager extends PersistentFSM[CartState, Cart, CartEvent] {
 
   when(InCheckout) {
     case Event(CheckoutCancelled, _) =>
-      log.info("Checkout cancelled")
+      log.info("Checkout cancelled CartEmptied")
       goto(Initialized) applying CartEmptied
 
     case Event(CheckoutClosed, _) =>
-      log.info("Checkout closed")
+      log.info("Checkout closed CartEmptied")
       goto(Initialized) applying CartEmptied
   }
 
   onTransition {
-    case _ -> Initialized => setTimer("cart-timer", CartTimerExpired, 10 seconds)
+    case _ -> Initialized => setTimer("cart-timer", CartTimerExpired, 30 seconds)
     case _ -> InCheckout => cancelTimer(self.toString)
   }
 

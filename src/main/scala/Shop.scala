@@ -7,7 +7,7 @@ import cart.Cart.Item
 import cart.CartManager.AddItem
 import checkout.CheckoutManager.{SelectDeliveryMethod, SelectPaymentMethod, StartCheckout}
 import order.OrderManager
-import payment.PaymentManager.DoPayment
+import payment.Payment.DoPayment
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -18,13 +18,12 @@ object Shop extends App {
   val system = ActorSystem("Shop")
   val orderActor: ActorRef = system.actorOf(Props[OrderManager], "OrderManagerActor")
 
-  Await.result(orderActor ? AddItem(Item(URI.create("/egg"), "egg", BigDecimal.valueOf(12.34), 2)), timeout.duration)
+//  Await.result(orderActor ? AddItem(Item(URI.create("/mayo"), "mayo", BigDecimal.valueOf(1.34), 2)), timeout.duration)
   Await.result(orderActor ? StartCheckout, timeout.duration)
-
+//
   Await.result(orderActor ? SelectDeliveryMethod("DHL"), timeout.duration)
   Await.result(orderActor ? SelectPaymentMethod("PAYPAL"), timeout.duration)
 
   Await.result(orderActor ? DoPayment, timeout.duration)
-
 
 }
