@@ -6,7 +6,7 @@ import akka.persistence.fsm.PersistentFSM.FSMState
 import checkout.CheckoutManager.{CheckoutState, DeliveryExpired, DeliveryMethodSelected, PaymentExpired, PaymentMethodSelected, ProcessingPayment, SelectDeliveryMethod, SelectPaymentMethod, SelectingDeliveryMethod, SelectingPaymentMethod, _}
 import order.OrderManager.OrderManagerCommand
 import payment.Payment
-import payment.Payment.{PaymentReceived, PaymentServiceStarted}
+import payment.Payment.{PaymentServiceStarted, PaymentSuccessful}
 
 import scala.concurrent.duration._
 import scala.reflect.{ClassTag, classTag}
@@ -67,19 +67,19 @@ class CheckoutManager extends PersistentFSM[CheckoutState, Checkout, CheckoutEve
     case Event(SelectPaymentMethod(paymentMethod), _) =>
       log.info("Selected payment method: {}", paymentMethod)
 
-      val payment = context.actorOf(Props[Payment], "payment")
+      val payment = context.actorOf(Props(new Payment(paymentMethod)), "payment")
       goto(ProcessingPayment) applying PaymentMethodSelected(paymentMethod) replying PaymentServiceStarted(payment)
   }
 
   when(ProcessingPayment) {
-    case Event(PaymentReceived, checkout) =>
+    case Event(PaymentSuccessful, checkout) =>
       log.info("Payment received. Delivery {}, payment {}", checkout.getDeliveryMethod, checkout.getPaymentMethod)
       cancelTimer(PaymentTimer.toString)
       log.info("Checkout Finished")
       checkout.getOrderManager ! CheckoutClosed
       context.parent ! CheckoutClosed // reply to cart
       log.info("Checkout finished stopping")
-      stop applying PaymentReceived
+      stop applying PaymentSuccessful
   }
 
   onTransition {
@@ -107,7 +107,7 @@ class CheckoutManager extends PersistentFSM[CheckoutState, Checkout, CheckoutEve
       case CheckoutCancelled ⇒ checkoutBeforeEvent
       case CheckoutClosed ⇒ checkoutBeforeEvent
       case CheckoutStarted(_) ⇒ checkoutBeforeEvent
-      case PaymentReceived =>
+      case PaymentSuccessful =>
         context.stop(self)
         checkoutBeforeEvent
     }

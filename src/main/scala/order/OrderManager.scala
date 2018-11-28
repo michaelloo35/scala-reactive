@@ -5,7 +5,7 @@ import cart.CartManager
 import cart.CartManager.{InCheckout => _, _}
 import checkout.CheckoutManager._
 import order.OrderManager._
-import payment.Payment.{DoPayment, PaymentConfirmed, PaymentServiceStarted}
+import payment.Payment.{DoPayment, PaymentServiceStarted, PaymentSuccessful}
 
 object OrderManager {
 
@@ -82,11 +82,11 @@ class OrderManager extends FSM[OrderManagerState, OrderManagerData] {
   }
 
   when(InPayment) {
-    case Event(DoPayment, PaymentRef(payment, _)) =>
-      payment ! DoPayment
+    case Event(DoPayment(method), PaymentRef(payment, _)) =>
+      payment ! DoPayment(method)
       stay using PaymentRef(payment, sender)
 
-    case Event(PaymentConfirmed, PaymentRef(_, owner)) =>
+    case Event(PaymentSuccessful, PaymentRef(_, owner)) =>
       log.info("Finished payment")
       owner ! Done
       goto(Open)

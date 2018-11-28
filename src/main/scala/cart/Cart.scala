@@ -5,7 +5,7 @@ import java.net.URI
 import cart.Cart.Item
 
 object Cart {
-  case class Item(id: URI, name: String, price: BigDecimal, count: Int)
+  case class Item(id: URI, company: String, name: String, price: BigDecimal, count: Int)
 }
 
 sealed trait Cart {
